@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: billing
+      POSTGRES_USER: billing
+      POSTGRES_PASSWORD: local-only
+    ports: ["127.0.0.1:${BILLING_POSTGRES_PORT:-5432}:5432"]
+    volumes: ["billing-db:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U billing"]
+      interval: 3s
+      retries: 20
+  object-storage:
+    image: localstack/localstack:4.10.0
+    environment:
+      SERVICES: s3
+      PERSISTENCE: '1'
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    ports: ["127.0.0.1:${BILLING_OBJECT_STORAGE_PORT:-4566}:4566"]
+    volumes:
+      - billing-objects:/var/lib/localstack
+      - ./infrastructure/object-storage/init.sh:/etc/localstack/init/ready.d/10-bucket.sh:ro
+    healthcheck:
+      test: ["CMD", "awslocal", "s3api", "head-bucket", "--bucket", "billing-invoices"]
+      interval: 5s
+      retries: 30
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/billing
+      BILLING_DEMO: 'true'
+      BILLING_AUTO_COLLECT: 'false'
+      BILLING_DOCUMENTS_STORAGE: s3
+      BILLING_DOCUMENTS_S3_ENDPOINT: http://object-storage:4566
+      BILLING_DOCUMENTS_S3_BUCKET: billing-invoices
+      BILLING_DOCUMENTS_S3_REGION: us-east-1
+      BILLING_DOCUMENTS_S3_ENCRYPTION: 'false'
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      BILLING_RAZORPAY_ENABLED: ${BILLING_RAZORPAY_ENABLED:-false}
+      BILLING_RAZORPAY_KEY_ID: ${BILLING_RAZORPAY_KEY_ID:-}
+      BILLING_RAZORPAY_KEY_SECRET: ${BILLING_RAZORPAY_KEY_SECRET:-}
+      BILLING_RAZORPAY_WEBHOOK_SECRET: ${BILLING_RAZORPAY_WEBHOOK_SECRET:-}
+      BILLING_RAZORPAY_PREVIOUS_WEBHOOK_SECRET: ${BILLING_RAZORPAY_PREVIOUS_WEBHOOK_SECRET:-}
+      BILLING_RAZORPAY_ACCOUNT_ID: ${BILLING_RAZORPAY_ACCOUNT_ID:-}
+    ports: ["127.0.0.1:${BILLING_BACKEND_PORT:-8080}:8080"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      object-storage:
+        condition: service_healthy
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://backend:8080
+    ports: ["127.0.0.1:${BILLING_FRONTEND_PORT:-3000}:3000"]
+    depends_on: [backend]
+volumes:
+  billing-db:
+  billing-objects:

@@ -1,0 +1,1 @@
+{"date":"2026-11-17","workload":"checkout","workers":8,"requests":100,"successes":100,"seconds":1.2950327500002459,"achieved_tps":77.21812440649167,"p50_ms":94.1320829988399,"p95_ms":158.07770900210016,"p99_ms":196.96366700009094,"scope":"local simulator sample; not renewal or scale-target evidence"}
